@@ -27,7 +27,7 @@ const SignUp = () => {
     };
     const successMessage: string = "Sign-Up successful."
     const onSignUpPress = () => {
-        let ipAddress = '192.168.1.9' // network.getIpAddressAsync()
+        let ipAddress = '192.168.1.2' // network.getIpAddressAsync()
         let apiEndpoint = ('http://' + ipAddress + ':5000/account/register')
         requestOptions.body = JSON.stringify(form)
 

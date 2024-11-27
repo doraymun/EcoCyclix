@@ -1,24 +1,19 @@
 import { Redirect, router } from "expo-router";
-import React, { useState } from  'react';
+import React, { useState, useEffect } from  'react';
 import AsyncStorage from '@react-native-async-storage/async-storage'
 
 const Home = () => {
     const [initFlag, setInitFlag] = useState(false)
 
-    AsyncStorage.getItem('ecocyclix-appdata', (error, result) => {
-        if (result == null || result == undefined) {
-            setInitFlag(false)
-        } else {
-            setInitFlag(true)
-        }
-
-        return (
-            initFlag ? router.replace("/(auth)/sign-in")
-                     : router.replace("/(auth)/welcome")
-        )
+    useEffect(() => {
+        AsyncStorage.getItem('ecocyclix-appdata', (error, result) => {
+            if (result == null || result == undefined) {
+                router.replace("/(auth)/welcome")
+            } else {
+                router.replace("/(auth)/sign-in")
+            }
+        })
     })
-
-    // return <Redirect href="/(auth)/welcome" />;
 };
 
 export default Home;

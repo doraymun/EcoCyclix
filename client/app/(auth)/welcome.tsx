@@ -5,7 +5,6 @@ import Swiper from 'react-native-swiper';
 import { useRef, useState } from  'react';
 import { onboarding } from "@/constants";
 import CustomButton from "@/components/CustomButton";
-import AsyncStorage from '@react-native-async-storage/async-storage'
 
 const Onboarding = () => {
     const swiperRef = useRef<Swiper>(null);

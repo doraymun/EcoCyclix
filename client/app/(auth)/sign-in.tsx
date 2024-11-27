@@ -3,8 +3,8 @@ import InputField from "@/components/InputField";
 import OAuth from "@/components/OAuth";
 import { icons, images } from "@/constants";
 import { LinearGradient } from "expo-linear-gradient";
-import { Link, router } from "expo-router";
-import { useState } from "react";
+import { Link, Redirect, router } from "expo-router";
+import React, { useState, useEffect } from "react";
 import { Text, View, ScrollView, Image } from "react-native";
 import ecoIcon from "@/assets/images/icon.png";
 import AsyncStorage from '@react-native-async-storage/async-storage'
@@ -23,12 +23,9 @@ const SignIn = () => {
         headers: { 'Content-Type': 'application/json' },
         body: ""
     };
-    const onDismissSnackBar = () => {
-        setVisible(false)
-    }
     const [isSignedInFlag, setSignedInFlag] = useState(false);
     const onSignInPress = async () => {
-        let ipAddress = '192.168.1.9' // await network.getIpAddressAsync()
+        let ipAddress = '192.168.1.2' // await network.getIpAddressAsync()
         let apiEndpoint = ('http://' + ipAddress + ':5000/account/login')
 
         requestOptions.body = JSON.stringify(form)
@@ -69,27 +66,33 @@ const SignIn = () => {
         })
     };
 
-    // AsyncStorage.getItem('ecocyclix-appdata', (error, result) => {
-    //     if (result != null || result != undefined) {
-    //         let appData:{
-    //             isAlreadyInit:boolean,
-    //             user:{
-    //                 id:number,
-    //                 firstName:string,
-    //                 middleName:string,
-    //                 lastName:string,
-    //                 email:string
-    //             }} = JSON.parse(result)
+    useEffect(() => {
+        AsyncStorage.getItem('ecocyclix-appdata', (error, result) => {
+            if (result != null || result != undefined) {
+                let appData:{
+                    isAlreadyInit:boolean,
+                    user:{
+                        id:number,
+                        firstName:string,
+                        middleName:string,
+                        lastName:string,
+                        email:string
+                    }} = JSON.parse(result)
+    
+                if (appData.isAlreadyInit && appData.user != null && appData.user.email != "") {
+                    setSignedInFlag(true)
+                }
+            }
+        })
+    }, []);
 
-    //         if (appData.isAlreadyInit && appData.user != null && appData.user.email != "") {
-    //             setSignedInFlag(true)
-    //         }
-    //     }
-    // })
-
+    if (isSignedInFlag) {
+        return(
+            <Redirect href="/(root)/(tabs)/home" />
+        )
+    } else {
         return (
-            //visSignedInFlag ? router.replace("/(root)/(tabs)/home") :
-            (<View className="flex-1">
+            <View className="flex-1">
                 <ScrollView className = "flex-1 bg-[#FDF7F8]">
                     <View className = "flex-1 bg-[#FDF7F8]">
                         <LinearGradient
@@ -125,7 +128,7 @@ const SignIn = () => {
                                 onChangeText={(value) => setForm({ ...form, password: value })}
                             />
     
-                            <CustomButton title="Sign In" onPress={onSignInPress} className="mt-6" />
+                            <CustomButton title="Sign In" onPress={() => onSignInPress()} className="mt-6" />
                         
     
                             <OAuth/>
@@ -140,7 +143,9 @@ const SignIn = () => {
                 </ScrollView>
                 <Snackbar
                     visible={visible}
-                    onDismiss={onDismissSnackBar}
+                    onDismiss={() => {
+                        setVisible(false)
+                    }}
                     action={{
                     label: 'OK',
                     onPress: () => {
@@ -149,7 +154,8 @@ const SignIn = () => {
                     }}>
                     {message}
                 </Snackbar>
-            </View>));
+            </View>);
+    }
 };
 
 export default SignIn;

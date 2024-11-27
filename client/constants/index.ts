@@ -30,6 +30,7 @@ import onboarding1 from "@/assets/images/onboarding1.png";
 import onboarding2 from "@/assets/images/onboarding2.png";
 import onboarding3 from "@/assets/images/onboarding3.png";
 import ecocyclixMarker from "@/assets/images/ecocyclix-marker.png";
+import dbtcParkingSLotBg from "@/assets/images/dbtc_1.jpg";
 
 export const images = {
     onboarding1,
@@ -39,6 +40,7 @@ export const images = {
     noResult,
     message,
     ecocyclixMarker,
+    dbtcParkingSLotBg
 };
 
 export const icons = {

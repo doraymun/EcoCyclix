@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
 import MapView, { Marker } from 'react-native-maps';
-import { Animated, StyleSheet, View, Dimensions, Image, TouchableOpacity, Text, TouchableWithoutFeedback } from 'react-native';
+import { Animated, StyleSheet, View, Dimensions, Image, TouchableOpacity, Pressable, Text, TouchableWithoutFeedback } from 'react-native';
 import * as Location from 'expo-location';
 import { images } from "@/constants";
 import Icon from 'react-native-vector-icons/Ionicons';
-import { useRouter } from 'expo-router';
+import { Href, useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage'
+import { Button } from 'react-native-paper';
 
 type Page = 'profile' | 'payment' | 'history' | 'settings' | 'help';
 
@@ -18,7 +19,12 @@ export default function Home() {
     latitudeDelta: 0.005,
     longitudeDelta: 0.005,
   });
-
+  const [reservation, setReservation] = useState<{parkingAreaID:number|null, parkingSlot:number|null, userID:number|null,status:number|null}>({
+    parkingAreaID:null,
+    parkingSlot:null,
+    userID:null,
+    status:null
+  })
   const [dropdownVisible, setDropdownVisible] = useState(false);
   const dropdownHeight = useRef(new Animated.Value(0)).current;
   const [parkingSlots, setParkingSlots] = useState(Array(8).fill('green')); // All slots available initially
@@ -43,6 +49,44 @@ export default function Home() {
 
   useEffect(() => {
     userLocation();
+
+    AsyncStorage.getItem('ecocyclix-appdata', (error, result) => {
+      let appData: {
+          isAlreadyInit:boolean,
+          user:{
+              id:number,
+              firstName:string,
+              middleName:string,
+              lastName:string,
+              email:string
+          },
+          selectedParkingSlot: {
+            parkingAreaID:number,
+            parkingAreaName:string,
+            parkingSlot:number
+          },
+          reservations: {
+            parkingAreaID:number | null,
+            parkingSlot:number | null,
+            userID:number | null,
+            status:number | null
+          }[]
+      } = {
+          isAlreadyInit: JSON.parse(result!).isAlreadyInit,
+          user: JSON.parse(result!).user,
+          selectedParkingSlot: { parkingAreaID: 1, parkingAreaName: 'Don Bosco Technical College', parkingSlot: 0 },
+          reservations: JSON.parse(result!).reservations
+      }
+  
+      if (result != null || result != undefined) {
+        setName((appData.user.firstName + ' ' + appData.user.lastName))
+
+        if (appData.reservations != null || appData.reservations != undefined) {
+          setReservation(appData.reservations[0])
+          togglerTimer()
+        }
+      }
+    })
   }, []);
 
   const fixedMarker = {
@@ -93,7 +137,45 @@ export default function Home() {
 
   const handleSlotPress = (slotIndex: number) => {
     if (showParkingButtons) {
-      router.replace('/(root)/(tabs)/payment')
+      setShowParkingButtons(false)
+
+      AsyncStorage.getItem('ecocyclix-appdata', (error, result) => { 
+        let appData: {
+            isAlreadyInit:boolean,
+            user:{
+                id:number,
+                firstName:string,
+                middleName:string,
+                lastName:string,
+                email:string
+            },
+            selectedParkingSlot: {
+              parkingAreaID:number,
+              parkingAreaName:string,
+              parkingSlot:number
+            },
+            reservations: {
+              parkingAreaID:number | null,
+              parkingSlot:number | null,
+              userID:number | null,
+              status:number | null
+            }[]
+        } = {
+            isAlreadyInit: JSON.parse(result!).isAlreadyInit,
+            user: JSON.parse(result!).user,
+            selectedParkingSlot: { parkingAreaID: 1, parkingAreaName: 'Don Bosco Technical College', parkingSlot: slotIndex },
+            reservations: [{
+              parkingAreaID: 1,
+              parkingSlot: slotIndex,
+              userID: JSON.parse(result!).user.id,
+              status: 0
+            }]
+        }
+
+        AsyncStorage.setItem('ecocyclix-appdata', JSON.stringify(appData), () => {
+          router.replace('/(root)/(tabs)/parkingslot')
+        })
+      })
     }
   };
 
@@ -142,22 +224,91 @@ export default function Home() {
     longitude: (fixedMarker.longitude + (60 * Math.cos((7 * (360 / 8)) * (Math.PI / 180))) / (111300 * Math.cos(fixedMarker.latitude * (Math.PI / 180))))
   };
 
-  AsyncStorage.getItem('ecocyclix-appdata', (error, result) => {
-    let appData: {
-        isAlreadyInit:boolean,
-        user:{
-            id:number,
-            firstName:string,
-            middleName:string,
-            lastName:string,
-            email:string,
-            error:{ message:string} }
-    } = (result != null || result != undefined) ? JSON.parse(result.replace('\\', '')) : {};
+  const [countDown, setCountDown] = React.useState(0);
+  const [runTimer, setRunTimer] = React.useState(false);
 
-    if (result != null || result != undefined) {
-      setName((appData.user.firstName + ' ' + appData.user.lastName))
+  useEffect(() => {
+    let timerId;
+
+    if (runTimer) {
+      setCountDown(60 * 5);
+      timerId = setInterval(() => {
+        setCountDown((countDown) => countDown - 1);
+      }, 1000);
+    } else {
+      clearInterval(timerId);
     }
-  })
+
+    return () => clearInterval(timerId);
+  }, [runTimer]);
+
+  useEffect(() => {
+    if (countDown < 0 && runTimer) {
+      setRunTimer(false);
+      setCountDown(0);
+
+      // setReservation({
+      //   parkingAreaID:null,
+      //   parkingSlot:null,
+      //   userID:null,
+      //   status:null
+      // })
+    }
+  }, [countDown, runTimer]);
+
+  const togglerTimer = () => setRunTimer((t) => !t);
+
+  const seconds = String(countDown % 60).padStart(2, 0);
+  const minutes = String(Math.floor(countDown / 60)).padStart(2, 0);
+
+  const checkIn = () => {
+    setReservation({
+      parkingAreaID: reservation.parkingAreaID,
+      parkingSlot: reservation.parkingSlot,
+      userID: reservation.userID,
+      status: 1
+    })
+  }
+
+  const checkOut = () => {
+    AsyncStorage.getItem('ecocyclix-appdata', (error, result) => {
+      let appData: {
+          isAlreadyInit:boolean,
+          user:{
+              id:number,
+              firstName:string,
+              middleName:string,
+              lastName:string,
+              email:string
+          },
+          selectedParkingSlot: {
+            parkingAreaID:number,
+            parkingAreaName:string,
+            parkingSlot:number
+          },
+          reservations: {
+            parkingAreaID:number | null,
+            parkingSlot:number | null,
+            userID:number | null,
+            status:number | null
+          }[]
+      } = {
+          isAlreadyInit: JSON.parse(result!).isAlreadyInit,
+          user: JSON.parse(result!).user,
+          selectedParkingSlot: { parkingAreaID: 1, parkingAreaName: 'Don Bosco Technical College', parkingSlot: 0 },
+          reservations: []
+      }
+      
+      setReservation({
+        parkingAreaID:null,
+        parkingSlot:null,
+        userID:null,
+        status:null
+      })
+
+      router.replace('/(root)/(tabs)/payment')
+    })
+  }
 
   return (
     <TouchableWithoutFeedback onPress={handleOutsidePress}>
@@ -171,129 +322,175 @@ export default function Home() {
           <Marker
             key={0}
             coordinate={parkingSlotMarker1}
-            title={(showParkingButtons) ? `Slot ${0 + 1}` : ''}
-            pinColor={'green'} // Color based on availability
-            onPress={() => handleSlotPress(0)}
+            title={(showParkingButtons) ? `Slot 1` : ''}
+            pinColor={(reservation.status == null) ? 'green' : (reservation.parkingSlot == 1 && reservation.status > 0) ? 'red' : 'gray'} // Color based on availability
+            onPress={() => handleSlotPress(1)}
             opacity={(showParkingButtons) ? 1 : 0}
           >
-            <TouchableOpacity
-              style={styles.parkingButton}
-              // Call the handler with the index
-            >
-              <Text style={styles.parkingText}>{0 + 1}</Text>
-            </TouchableOpacity>
+            <Pressable
+            style={ {backgroundColor: (reservation.status == null || reservation.parkingSlot != 1) ? '#74A94D' : (reservation.parkingSlot == 1 && reservation.status > 0) ? '#D3D3D3' : '#FF6961',
+              borderRadius: 15,
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: 40,
+              height: 40,
+              elevation: 2 } }
+          >
+            <Text style={styles.parkingText}>1</Text>
+          </Pressable>
           </Marker>
 
           <Marker
             key={1}
             coordinate={parkingSlotMarker2}
-            title={`Slot ${1 + 1}`}
-            pinColor={'green'} // Color based on availability
-            onPress={() => handleSlotPress(0)}
+            title={(showParkingButtons) ? `Slot 2` : ''}
+            pinColor={(reservation.status == null) ? 'green' : (reservation.parkingSlot == 2 && reservation.status > 0) ? 'red' : 'gray'} // Color based on availability
+            onPress={() => handleSlotPress(2)}
             opacity={(showParkingButtons) ? 1 : 0}
           >
-            <TouchableOpacity
-              style={styles.parkingButton}
-              // Call the handler with the index
-            >
-              <Text style={styles.parkingText}>{1 + 1}</Text>
-            </TouchableOpacity>
+            <Pressable
+            style={ {backgroundColor: (reservation.status == null || reservation.parkingSlot != 2) ? '#74A94D' : (reservation.parkingSlot == 2 && reservation.status > 0) ? '#D3D3D3' : '#FF6961',
+              borderRadius: 15,
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: 40,
+              height: 40,
+              elevation: 2 } }
+          >
+            <Text style={styles.parkingText}>2</Text>
+          </Pressable>
           </Marker>
 
           <Marker
             key={2}
             coordinate={parkingSlotMarker3}
-            title={`Slot ${2 + 1}`}
-            pinColor={'green'} // Color based on availability
-            onPress={() => handleSlotPress(2)}
+            title={(showParkingButtons) ? `Slot 3` : ''}
+            pinColor={(reservation.status == null || reservation.parkingSlot != 3) ? 'green' : (reservation.parkingSlot == 3 && reservation.status > 0) ? 'red' : 'gray'} // Color based on availability
+            onPress={() => handleSlotPress(3)}
             opacity={(showParkingButtons) ? 1 : 0}
           >
-            <TouchableOpacity
-              style={styles.parkingButton}
-              // Call the handler with the index
-            >
-              <Text style={styles.parkingText}>{2 + 1}</Text>
-          </TouchableOpacity>
+            <Pressable
+            style={ {backgroundColor: (reservation.status == null || reservation.parkingSlot != 3) ? '#74A94D' : (reservation.parkingSlot == 3 && reservation.status > 0) ? '#D3D3D3' : '#FF6961',
+              borderRadius: 15,
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: 40,
+              height: 40,
+              elevation: 2 } }
+          >
+            <Text style={styles.parkingText}>3</Text>
+          </Pressable>
         </Marker>
 
         <Marker
           key={3}
           coordinate={parkingSlotMarker4}
-          title={`Slot ${3 + 1}`}
-          pinColor={'green'} // Color based on availability
-          onPress={() => handleSlotPress(3)}
+          title={(showParkingButtons) ? `Slot 4` : ''}
+          pinColor={(reservation.status == null) ? 'green' : (reservation.parkingSlot == 4 && reservation.status > 0) ? 'red' : 'gray'} // Color based on availability
+          onPress={() => handleSlotPress(4)}
           opacity={(showParkingButtons) ? 1 : 0}
         >
-          <TouchableOpacity
-            style={styles.parkingButton}
-            // Call the handler with the index
+          <Pressable
+            style={ {backgroundColor: (reservation.status == null || reservation.parkingSlot != 4) ? '#74A94D' : (reservation.parkingSlot == 4 && reservation.status > 0) ? '#D3D3D3' : '#FF6961',
+              borderRadius: 15,
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: 40,
+              height: 40,
+              elevation: 2 } }
           >
-            <Text style={styles.parkingText}>{3+ 1}</Text>
-          </TouchableOpacity>
+            <Text style={styles.parkingText}>4</Text>
+          </Pressable>
         </Marker>
 
         <Marker
           key={4}
           coordinate={parkingSlotMarker5}
-          title={`Slot ${4 + 1}`}
-          pinColor={'green'} // Color based on availability
-          onPress={() => handleSlotPress(4)}
+          title={(showParkingButtons) ? `Slot 5` : ''}
+          pinColor={(reservation.status == null) ? 'green' : (reservation.parkingSlot == 5 && reservation.status > 0) ? 'red' : 'gray'} // Color based on availability
+          onPress={() => handleSlotPress(5)}
           opacity={(showParkingButtons) ? 1 : 0}
         >
-          <TouchableOpacity
-            style={styles.parkingButton}
-            // Call the handler with the index
+          <Pressable
+            style={ {backgroundColor: (reservation.status == null || reservation.parkingSlot != 5) ? '#74A94D' : (reservation.parkingSlot == 5 && reservation.status > 0) ? '#D3D3D3' : '#FF6961',
+              borderRadius: 15,
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: 40,
+              height: 40,
+              elevation: 2 } }
           >
-            <Text style={styles.parkingText}>{4 + 1}</Text>
-          </TouchableOpacity>
+            <Text style={styles.parkingText}>5</Text>
+          </Pressable>
         </Marker>
 
         <Marker
           key={5}
           coordinate={parkingSlotMarker6}
-          title={`Slot ${5 + 1}`}
-          pinColor={'green'} // Color based on availability
-          onPress={() => handleSlotPress(5)}
+          title={(showParkingButtons) ? `Slot 6` : ''}
+          pinColor={(reservation.status == null) ? 'green' : (reservation.parkingSlot == 6 && reservation.status > 0) ? 'red' : 'gray'} // Color based on availability
+          onPress={() => handleSlotPress(6)}
           opacity={(showParkingButtons) ? 1 : 0}
         >
-          <TouchableOpacity
-            style={styles.parkingButton}
-            // Call the handler with the index
+          <Pressable
+            style={ {backgroundColor: (reservation.status == null || reservation.parkingSlot != 6) ? '#74A94D' : (reservation.parkingSlot == 6 && reservation.status > 0) ? '#D3D3D3' : '#FF6961',
+              borderRadius: 15,
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: 40,
+              height: 40,
+              elevation: 2 } }
           >
-            <Text style={styles.parkingText}>{5 + 1}</Text>
-          </TouchableOpacity>
+            <Text style={styles.parkingText}>6</Text>
+          </Pressable>
         </Marker>
               
         <Marker
           key={6}
           coordinate={parkingSlotMarker7}
-          title={`Slot ${6 + 1}`}
-          pinColor={'green'} // Color based on availability
-          onPress={() => handleSlotPress(6)}
+          title={(showParkingButtons) ? `Slot 7` : ''}
+          pinColor={(reservation.status == null) ? 'green' : (reservation.parkingSlot == 7 && reservation.status > 0) ? 'red' : 'gray'} // Color based on availability
+          onPress={() => handleSlotPress(7)}
           opacity={(showParkingButtons) ? 1 : 0}
         >
-          <TouchableOpacity
-            style={styles.parkingButton}
-            // Call the handler with the index
+          <Pressable
+            style={ {backgroundColor: (reservation.status == null || reservation.parkingSlot != 7) ? '#74A94D' : (reservation.parkingSlot == 7 && reservation.status > 0) ? '#D3D3D3' : '#FF6961',
+              borderRadius: 15,
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: 40,
+              height: 40,
+              elevation: 2 } }
           >
-            <Text style={styles.parkingText}>{6 + 1}</Text>
-          </TouchableOpacity>
+            <Text style={styles.parkingText}>7</Text>
+          </Pressable>
         </Marker>
               
         <Marker
           key={7}
           coordinate={parkingSlotMarker8}
-          title={`Slot ${7 + 1}`}
-          pinColor={'green'} // Color based on availability
-          onPress={() => handleSlotPress(7)}
+          title={(showParkingButtons) ? `Slot 8` : ''}
+          pinColor={(reservation.status == null) ? 'green' : (reservation.parkingSlot == 8 && reservation.status > 0) ? 'red' : 'gray'} // Color based on availability
+          onPress={() => handleSlotPress(8)}
           opacity={(showParkingButtons) ? 1 : 0}
         >
-          <TouchableOpacity
+          <Pressable
+            style={ {backgroundColor: (reservation.status == null || reservation.parkingSlot != 8) ? '#74A94D' : (reservation.parkingSlot == 8 && reservation.status > 0) ? '#D3D3D3' : '#FF6961',
+              borderRadius: 15,
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: 40,
+              height: 40,
+              elevation: 2 } }
+          >
+            <Text style={styles.parkingText}>8</Text>
+          </Pressable>
+          {/* <TouchableOpacity
             style={styles.parkingButton}
             // Call the handler with the index
           >
             <Text style={styles.parkingText}>{7 + 1}</Text>
-          </TouchableOpacity>
+          </TouchableOpacity> */}
         </Marker>
 
 
@@ -355,7 +552,16 @@ export default function Home() {
         </TouchableOpacity>
 
         <View style={styles.statusBar}>
-          <Text style={styles.statusText}>Status: Your parking status here</Text>
+          {
+            ((reservation.parkingSlot != null) ? (<Text style={styles.statusText}>Reserved at slot: {reservation.parkingSlot}</Text>) : (<Text style={styles.statusText}>No parking slot booked.</Text>))
+          }<Button
+            style={styles.statusAction}
+            labelStyle={{ fontSize: 12, lineHeight: 12 }}
+            buttonColor='#74A94D'
+            mode="contained"
+            onPress={() => (reservation.status != null && reservation.status > 0) ? checkOut() : checkIn()}>
+            {(reservation.status != null && reservation.status > 0) ? 'Check-Out' : ('Check-In(' + minutes + ':' + seconds + ')')}
+          </Button>
         </View>
       </View>
     </TouchableWithoutFeedback>
@@ -385,6 +591,10 @@ const styles = StyleSheet.create({
     padding: 3,
     borderRadius: 5,
     elevation: 3,
+  },
+  statusAction: {
+    left: 90,
+    height: 30
   },
   helpButton: {
     position: 'absolute',
@@ -465,6 +675,8 @@ const styles = StyleSheet.create({
     color: '#000',
   },
   statusBar: {
+    flexDirection:'row',
+    flexWrap:'wrap',
     position: 'absolute',
     bottom: 70,
     width: 385,
@@ -478,6 +690,7 @@ const styles = StyleSheet.create({
   },
   statusText: {
     top: 5,
+    left: 5,
     fontSize: 16,
     fontWeight: 'bold',
   },
